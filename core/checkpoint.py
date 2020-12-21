@@ -37,5 +37,9 @@ class CheckpointIO(object):
             module_dict = torch.load(fname)
         else:
             module_dict = torch.load(fname, map_location=torch.device('cpu'))
+        
         for name, module in self.module_dict.items():
-            module.load_state_dict(module_dict[name])
+            if os.path.isfile(module_dict[name]):
+                module.load_state_dict(module_dict[name])
+            elif 'equal' in name and os.path.isfile(module_dict[name.replace('equal', '')])
+                module.load_state_dict(module_dict[name.replace('equal', '')])

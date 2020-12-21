@@ -24,7 +24,6 @@ from core.data_loader import InputFetcher
 import core.utils as utils
 from metrics.eval import calculate_metrics
 
-
 class Solver(nn.Module):
     def __init__(self, args):
         super().__init__()
@@ -105,38 +104,55 @@ class Solver(nn.Module):
 
             masks = nets.fan.get_heatmap(x_real) if args.w_hpf > 0 else None
 
-            # train the discriminator
-            d_loss, d_losses_latent = compute_d_loss(
-                nets, args, x_real, y_org, y_trg, z_trg=z_trg, masks=masks)
-            self._reset_grad()
-            d_loss.backward()
-            optims.discriminator.step()
+            if not args.equalize:
+                # train the discriminator
+                d_loss, d_losses_latent = compute_d_loss(
+                    nets, args, x_real, y_org, y_trg, z_trg=z_trg, masks=masks)
+                self._reset_grad()
+                d_loss.backward()
+                optims.discriminator.step()
 
-            d_loss, d_losses_ref = compute_d_loss(
-                nets, args, x_real, y_org, y_trg, x_ref=x_ref, masks=masks)
-            self._reset_grad()
-            d_loss.backward()
-            optims.discriminator.step()
+                d_loss, d_losses_ref = compute_d_loss(
+                    nets, args, x_real, y_org, y_trg, x_ref=x_ref, masks=masks)
+                self._reset_grad()
+                d_loss.backward()
+                optims.discriminator.step()
 
-            # train the generator
-            g_loss, g_losses_latent = compute_g_loss(
+                # train the generator
+                g_loss, g_losses_latent = compute_g_loss(
+                    nets, args, x_real, y_org, y_trg, z_trgs=[z_trg, z_trg2], masks=masks)
+                self._reset_grad()
+                g_loss.backward()
+                optims.generator.step()
+                optims.mapping_network.step()
+                optims.style_encoder.step()
+
+                g_loss, g_losses_ref = compute_g_loss(
+                    nets, args, x_real, y_org, y_trg, x_refs=[x_ref, x_ref2], masks=masks)
+                self._reset_grad()
+                g_loss.backward()
+                optims.generator.step()
+
+                # compute moving average of network parameters
+                moving_average(nets.generator, nets_ema.generator, beta=0.999)
+                moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
+                moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
+            
+            else:
+                g_loss, g_losses_latent = compute_g_loss(
                 nets, args, x_real, y_org, y_trg, z_trgs=[z_trg, z_trg2], masks=masks)
-            self._reset_grad()
-            g_loss.backward()
-            optims.generator.step()
-            optims.mapping_network.step()
-            optims.style_encoder.step()
+                
+                self._reset_grad()
+                
+                g_loss.backward()
 
-            g_loss, g_losses_ref = compute_g_loss(
-                nets, args, x_real, y_org, y_trg, x_refs=[x_ref, x_ref2], masks=masks)
-            self._reset_grad()
-            g_loss.backward()
-            optims.generator.step()
+                optims.generator_equal.step()
+                optims.mapping_network_equal.step()
 
-            # compute moving average of network parameters
-            moving_average(nets.generator, nets_ema.generator, beta=0.999)
-            moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
-            moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
+                # compute moving average of network parameters
+                moving_average(nets.generator_equal, nets_ema.generator_equal, beta=0.999)
+                moving_average(nets.mapping_network_equal, nets_ema.mapping_network_equal, beta=0.999)
+
 
             # decay weight for diversity sensitive loss
             if args.lambda_ds > 0:
@@ -159,7 +175,10 @@ class Solver(nn.Module):
             # generate images for debugging
             if (i+1) % args.sample_every == 0:
                 os.makedirs(args.sample_dir, exist_ok=True)
-                utils.debug_image(nets_ema, args, inputs=inputs_val, step=i+1)
+                if args.equalize:
+                    utils.debug_image_equal(nets_ema, args, inputs=inputs_val, step=i+1)
+                else:
+                    utils.debug_image(nets_ema, args, inputs=inputs_val, step=i+1)
 
             # save model checkpoints
             if (i+1) % args.save_every == 0:
@@ -266,6 +285,49 @@ def compute_g_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=None, m
                        ds=loss_ds.item(),
                        cyc=loss_cyc.item())
 
+def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=None, masks=None):
+    assert (z_trgs is None) != (x_refs is None)
+    if z_trgs is not None:
+        z_trg, z_trg2 = z_trgs
+    if x_refs is not None:
+        x_ref, x_ref2 = x_refs
+
+
+    # TODO: args.equal_label should be a tensor
+
+    s_equal = nets.mapping_network_equal(z_trg, args.equal_label)
+    x_equal = nets.generator_equal(x_real, s_equal, masks=masks)
+
+    # diversity sensitive loss
+    s_equal2 = nets.mapping_network_equal(z_trg2, args.equal_label)
+
+    x_equal2 = nets.generator_equal(x_real, s_equal2, masks=masks)
+    x_equal2 = x_equal2.detach()
+    loss_ds = torch.mean(torch.abs(x_equal - x_equal2))
+
+    # cycle-consistency loss
+    masks = nets.fan.get_heatmap(x_equal) if args.w_hpf > 0 else None
+    s_org = nets.style_encoder(x_real, y_org)
+    x_rec = nets.generator(x_equal, s_org, masks=masks)
+    loss_cyc = image_diff_loss(x_rec, x_real)
+
+    # Equal conversion loss
+    x_fake = nets.generator(x_real, t_trg, masks=masks)
+    x_fake_equal = nets.generator_equal(x_fake, s_equal)
+    loss_equal = image_diff_loss(x_fake, x_fake_equal)
+
+    # Equal classification loss
+    y_pred = nets.discriminator(x_equal)
+    loss_equal_cls = equalization_classification(y_pred)
+    
+
+    loss = args.lambda_equal * loss_equal + args.lambda_equal_cls * loss_equal_cls
+                -args.lambda_ds * loss_ds + args.lambda_cyc * loss_cyc
+    return loss, Munch(equal=loss_equal.item(),
+                       equal_cls=loss_sty.item(),
+                       ds=loss_ds.item(),
+                       cyc=loss_cyc.item())
+
 
 def moving_average(model, model_test, beta=0.999):
     for param, param_test in zip(model.parameters(), model_test.parameters()):
@@ -278,6 +340,14 @@ def adv_loss(logits, target):
     loss = F.binary_cross_entropy_with_logits(logits, targets)
     return loss
 
+
+def image_diff_loss(x, y):
+    return torch.mean(torch.abs(x - y))
+
+def equalization_classification(logit):
+    zeros = torch.full((batch_size, n_domains), 0.5).float().cuda()
+    vars = (logit).sum(1)
+    return bce(logit, zeros)
 
 def r1_reg(d_out, x_in):
     # zero-centered gradient penalty for real images

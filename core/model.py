@@ -271,30 +271,50 @@ class Discriminator(nn.Module):
         blocks += [nn.Conv2d(dim_out, num_domains, 1, 1, 0)]
         self.main = nn.Sequential(*blocks)
 
-    def forward(self, x, y):
+    def forward(self, x, y=None):
         out = self.main(x)
         out = out.view(out.size(0), -1)  # (batch, num_domains)
         idx = torch.LongTensor(range(y.size(0))).to(y.device)
-        out = out[idx, y]  # (batch)
+
+        if y is not None:
+            out = out[idx, y]  # (batch)
+        else:
+            out = out[idx, :]
+
         return out
 
 
 def build_model(args):
-    generator = Generator(args.img_size, args.style_dim, w_hpf=args.w_hpf)
-    mapping_network = MappingNetwork(args.latent_dim, args.style_dim, args.num_domains)
-    style_encoder = StyleEncoder(args.img_size, args.style_dim, args.num_domains)
-    discriminator = Discriminator(args.img_size, args.num_domains)
+    generator = Generator(args.img_size, args.style_dim, w_hpf=args.w_hpf) # image + style => New image
+    mapping_network = MappingNetwork(args.latent_dim, args.style_dim, args.num_domains) # latent => style X num_domains
+    style_encoder = StyleEncoder(args.img_size, args.style_dim, args.num_domains) # image => style
+    discriminator = Discriminator(args.img_size, args.num_domains) # Image => is_real X num_domains
+
+    # Equal
+    generator_equal = copy.deepcopy(generator) # Image + style => New image
+    mapping_network_equal = MappingNetwork(args.latent_dim, args.style_dim, args.num_domains + 1) # latent => style X 1
+
+
+    # EMA
     generator_ema = copy.deepcopy(generator)
     mapping_network_ema = copy.deepcopy(mapping_network)
     style_encoder_ema = copy.deepcopy(style_encoder)
+    generator_equal_ema = copy.deepcopy(generator_equal)
+    mapping_network_equal_ema = copy.deepcopy(mapping_network_equal)
+
 
     nets = Munch(generator=generator,
                  mapping_network=mapping_network,
                  style_encoder=style_encoder,
-                 discriminator=discriminator)
+                 discriminator=discriminator
+                 generator_equal=generator_equal
+                 mapping_network_equal=mapping_network_equal)
     nets_ema = Munch(generator=generator_ema,
                      mapping_network=mapping_network_ema,
-                     style_encoder=style_encoder_ema)
+                     style_encoder=style_encoder_ema
+                     generator_equal=generator_equal_ema
+                     mapping_network_equal=mapping_network_equal_ema
+    )
 
     if args.w_hpf > 0:
         fan = FAN(fname_pretrained=args.wing_path).eval()

@@ -104,12 +104,20 @@ if __name__ == '__main__':
                         help='Weight for style reconstruction loss')
     parser.add_argument('--lambda_ds', type=float, default=1,
                         help='Weight for diversity sensitive loss')
+    parser.add_argument('--lambda_equal', type=float, default=1,
+                        help='Weight for equalized conversion loss')
+    parser.add_argument('--lambda_equal_cls', type=float, default=1,
+                        help='Weight for equalized classification loss')
     parser.add_argument('--ds_iter', type=int, default=100000,
                         help='Number of iterations to optimize diversity sensitive loss')
     parser.add_argument('--w_hpf', type=float, default=1,
                         help='weight for high-pass filtering')
 
     # training arguments
+    parser.add_argument('--equalize', type=bool, default=false,
+                        help='Should train to find the equalized domain')
+    parser.add_argument('--equal_label', type=int, default=10,
+                        help='Equalization label')
     parser.add_argument('--randcrop_prob', type=float, default=0.5,
                         help='Probabilty of using random-resized cropping')
     parser.add_argument('--total_iters', type=int, default=100000,
@@ -169,8 +177,10 @@ if __name__ == '__main__':
                         help='output directory when aligning faces')
 
     # face alignment
-    parser.add_argument('--wing_path', type=str, default='expr/checkpoints/wing.ckpt')
-    parser.add_argument('--lm_path', type=str, default='expr/checkpoints/celeba_lm_mean.npz')
+    parser.add_argument('--wing_path', type=str,
+                        default='expr/checkpoints/wing.ckpt')
+    parser.add_argument('--lm_path', type=str,
+                        default='expr/checkpoints/celeba_lm_mean.npz')
 
     # step size
     parser.add_argument('--print_every', type=int, default=10)
