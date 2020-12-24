@@ -41,5 +41,5 @@ class CheckpointIO(object):
         for name, module in self.module_dict.items():
             if os.path.isfile(module_dict[name]):
                 module.load_state_dict(module_dict[name])
-            elif 'equal' in name and os.path.isfile(module_dict[name.replace('equal', '')])
+            elif 'equal' in name and os.path.isfile(module_dict[name.replace('equal', '')]):
                 module.load_state_dict(module_dict[name.replace('equal', '')])

@@ -306,13 +306,13 @@ def build_model(args):
     nets = Munch(generator=generator,
                  mapping_network=mapping_network,
                  style_encoder=style_encoder,
-                 discriminator=discriminator
-                 generator_equal=generator_equal
+                 discriminator=discriminator,
+                 generator_equal=generator_equal,
                  mapping_network_equal=mapping_network_equal)
     nets_ema = Munch(generator=generator_ema,
                      mapping_network=mapping_network_ema,
-                     style_encoder=style_encoder_ema
-                     generator_equal=generator_equal_ema
+                     style_encoder=style_encoder_ema,
+                     generator_equal=generator_equal_ema,
                      mapping_network_equal=mapping_network_equal_ema
     )
 

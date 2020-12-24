@@ -321,7 +321,7 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     loss_equal_cls = equalization_classification(y_pred)
     
 
-    loss = args.lambda_equal * loss_equal + args.lambda_equal_cls * loss_equal_cls
+    loss = args.lambda_equal * loss_equal + args.lambda_equal_cls * loss_equal_cls\
                 -args.lambda_ds * loss_ds + args.lambda_cyc * loss_cyc
     return loss, Munch(equal=loss_equal.item(),
                        equal_cls=loss_sty.item(),
