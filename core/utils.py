@@ -119,13 +119,14 @@ def cycle_equal_using_latent(nets, args, x_src, y_src, y_trg_list, z_trg_list, p
         # s_avg = s_avg.repeat(N, 1)
 
         for z_trg in z_trg_list:
-            s_trg = nets.mapping_network_equal(z_trg, y_equal)
+            s_trg = nets.mapping_network(z_trg, y_trg)
+            s_trg_equal = nets.mapping_network_equal(z_trg, y_equal)
             # s_trg = torch.lerp(s_avg, s_trg, psi)
-            x_equal = nets.generator(x_src, s_trg, masks=masks)
-            x_concat += [x_equal]
-
+            x_equal = nets.generator_equal(x_src, s_trg_equal, masks=masks)
+            x_fake = nets.generator(x_src, s_trg, masks=masks)
+            x_fake_equal = nets.generator_equal(x_fake, s_trg_equal, masks=masks)
             x_src_rec = nets.generator_equal(x_equal, s_src, masks=masks)
-            x_concat += [x_src_rec]
+            x_concat += [x_fake, x_equal, x_fake_equal, x_src_rec]
     
     x_concat = torch.cat(x_concat, dim=0)
     save_image(x_concat, N, filename)
@@ -185,7 +186,7 @@ def debug_image_equal(nets, args, inputs, step):
     N = inputs.x_src.size(0)
 
     # latent-guided image synthesis
-    y_trg_list = [torch.tensor(args.num_domains).repeat(N).to(device)
+    y_trg_list = [torch.tensor(y).repeat(N).to(device)
                   for y in range(min(args.num_domains, 5))]
     z_trg_list = torch.randn(1, 1, args.latent_dim).repeat(1, N, 1).to(device)
     # for psi in [0.5, 0.7, 1.0]:
