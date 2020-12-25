@@ -313,7 +313,7 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     # cycle-consistency loss
     masks = nets.fan.get_heatmap(x_equal) if args.w_hpf > 0 else None
     s_org = nets.style_encoder(x_real, y_org)
-    x_rec = nets.generator(x_equal, s_org, masks=masks)
+    x_rec = nets.generator_equal(x_equal, s_org, masks=masks)
     loss_cyc = image_diff_loss(x_rec, x_real)
 
     # Equal conversion loss
