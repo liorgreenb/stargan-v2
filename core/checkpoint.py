@@ -39,7 +39,10 @@ class CheckpointIO(object):
             module_dict = torch.load(fname, map_location=torch.device('cpu'))
         
         for name, module in self.module_dict.items():
-            if os.path.isfile(module_dict[name]):
+            if name in module_dict.keys():
                 module.load_state_dict(module_dict[name])
-            elif 'equal' in name and os.path.isfile(module_dict[name.replace('equal', '')]):
+            elif 'equal' in name and name.replace('equal', '') in module_dict.keys():
+                print('Using normal net weights for equal netowrk-', name)
                 module.load_state_dict(module_dict[name.replace('equal', '')])
+            else:
+                print(name, 'not loaded', module_dict.keys())

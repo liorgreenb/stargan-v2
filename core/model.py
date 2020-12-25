@@ -274,7 +274,7 @@ class Discriminator(nn.Module):
     def forward(self, x, y=None):
         out = self.main(x)
         out = out.view(out.size(0), -1)  # (batch, num_domains)
-        idx = torch.LongTensor(range(y.size(0))).to(y.device)
+        idx = torch.LongTensor(range(x.size(0))).to(x.device)
 
         if y is not None:
             out = out[idx, y]  # (batch)

@@ -93,6 +93,8 @@ class Solver(nn.Module):
         # remember the initial value of ds weight
         initial_lambda_ds = args.lambda_ds
 
+        d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref, g_equal_losses = [{}] * 5
+
         print('Start training...')
         start_time = time.time()
         for i in range(args.resume_iter, args.total_iters):
@@ -139,12 +141,12 @@ class Solver(nn.Module):
                 moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
             
             else:
-                g_loss, g_losses_latent = compute_g_loss(
+                g_equal_loss, g_equal_losses = compute_g_equal_loss(
                 nets, args, x_real, y_org, y_trg, z_trgs=[z_trg, z_trg2], masks=masks)
                 
                 self._reset_grad()
                 
-                g_loss.backward()
+                g_equal_loss.backward()
 
                 optims.generator_equal.step()
                 optims.mapping_network_equal.step()
@@ -164,8 +166,8 @@ class Solver(nn.Module):
                 elapsed = str(datetime.timedelta(seconds=elapsed))[:-7]
                 log = "Elapsed time [%s], Iteration [%i/%i], " % (elapsed, i+1, args.total_iters)
                 all_losses = dict()
-                for loss, prefix in zip([d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref],
-                                        ['D/latent_', 'D/ref_', 'G/latent_', 'G/ref_']):
+                for loss, prefix in zip([d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref, g_equal_losses],
+                                        ['D/latent_', 'D/ref_', 'G/latent_', 'G/ref_', 'G_equal/latent_']):
                     for key, value in loss.items():
                         all_losses[prefix + key] = value
                 all_losses['G/lambda_ds'] = args.lambda_ds
@@ -287,19 +289,18 @@ def compute_g_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=None, m
 
 def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=None, masks=None):
     assert (z_trgs is None) != (x_refs is None)
-    if z_trgs is not None:
-        z_trg, z_trg2 = z_trgs
-    if x_refs is not None:
-        x_ref, x_ref2 = x_refs
+    z_trg, z_trg2 = z_trgs
+
+    
+    y_equal = torch.LongTensor([args.num_domains] * len(y_org))
+#     y_equal = torch.full((len(y_org),), 4, dtype=torch.long)
 
 
-    # TODO: args.equal_label should be a tensor
-
-    s_equal = nets.mapping_network_equal(z_trg, args.equal_label)
+    s_equal = nets.mapping_network_equal(z_trg, y_equal)
     x_equal = nets.generator_equal(x_real, s_equal, masks=masks)
 
     # diversity sensitive loss
-    s_equal2 = nets.mapping_network_equal(z_trg2, args.equal_label)
+    s_equal2 = nets.mapping_network_equal(z_trg2, y_equal)
 
     x_equal2 = nets.generator_equal(x_real, s_equal2, masks=masks)
     x_equal2 = x_equal2.detach()
@@ -312,9 +313,12 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     loss_cyc = image_diff_loss(x_rec, x_real)
 
     # Equal conversion loss
-    x_fake = nets.generator(x_real, t_trg, masks=masks)
+    s_fake = nets.mapping_network(z_trg, y_trg)
+    x_fake = nets.generator(x_real, s_fake, masks=masks)
+    
     x_fake_equal = nets.generator_equal(x_fake, s_equal)
-    loss_equal = image_diff_loss(x_fake, x_fake_equal)
+    
+    loss_equal = image_diff_loss(x_equal, x_fake_equal)
 
     # Equal classification loss
     y_pred = nets.discriminator(x_equal)
@@ -323,8 +327,9 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
 
     loss = args.lambda_equal * loss_equal + args.lambda_equal_cls * loss_equal_cls\
                 -args.lambda_ds * loss_ds + args.lambda_cyc * loss_cyc
+    
     return loss, Munch(equal=loss_equal.item(),
-                       equal_cls=loss_sty.item(),
+                       equal_cls=loss_equal_cls.item(),
                        ds=loss_ds.item(),
                        cyc=loss_cyc.item())
 
@@ -345,9 +350,12 @@ def image_diff_loss(x, y):
     return torch.mean(torch.abs(x - y))
 
 def equalization_classification(logit):
+    batch_size = logit.size(0)
+    n_domains = logit.size(1)
+    
     zeros = torch.full((batch_size, n_domains), 0.5).float().cuda()
     vars = (logit).sum(1)
-    return bce(logit, zeros)
+    return nn.BCEWithLogitsLoss()(logit, zeros)
 
 def r1_reg(d_out, x_in):
     # zero-centered gradient penalty for real images
