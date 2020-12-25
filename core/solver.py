@@ -18,6 +18,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from fastprogress.fastprogress import progress_bar, master_bar
+
 from core.model import build_model
 from core.checkpoint import CheckpointIO
 from core.data_loader import InputFetcher
@@ -97,7 +99,8 @@ class Solver(nn.Module):
 
         print('Start training...')
         start_time = time.time()
-        for i in range(args.resume_iter, args.total_iters):
+        pb = progress_bar(list(range(args.resume_iter, args.total_iters)))
+        for i in pb:
             # fetch images and labels
             inputs = next(fetcher)
             x_real, y_org = inputs.x_src, inputs.y_src
@@ -172,7 +175,7 @@ class Solver(nn.Module):
                         all_losses[prefix + key] = value
                 all_losses['G/lambda_ds'] = args.lambda_ds
                 log += ' '.join(['%s: [%.4f]' % (key, value) for key, value in all_losses.items()])
-                print(log)
+                pb.write(log)
 
             # generate images for debugging
             if (i+1) % args.sample_every == 0:
