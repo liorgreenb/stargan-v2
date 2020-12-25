@@ -99,7 +99,8 @@ class Solver(nn.Module):
 
         print('Start training...')
         start_time = time.time()
-        pb = progress_bar(list(range(args.resume_iter, args.total_iters)))
+        mb = master_bar(range(1))
+        pb = progress_bar(list(range(args.resume_iter, args.total_iters)), parent=mb)
         for i in pb:
             # fetch images and labels
             inputs = next(fetcher)
@@ -167,7 +168,7 @@ class Solver(nn.Module):
             if (i+1) % args.print_every == 0:
                 elapsed = time.time() - start_time
                 elapsed = str(datetime.timedelta(seconds=elapsed))[:-7]
-                log = "Elapsed time [%s], Iteration [%i/%i], " % (elapsed, i+1, args.total_iters)
+                log = ""
                 all_losses = dict()
                 for loss, prefix in zip([d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref, g_equal_losses],
                                         ['D/latent_', 'D/ref_', 'G/latent_', 'G/ref_', 'G_equal/latent_']):
@@ -175,7 +176,7 @@ class Solver(nn.Module):
                         all_losses[prefix + key] = value
                 all_losses['G/lambda_ds'] = args.lambda_ds
                 log += ' '.join(['%s: [%.4f]' % (key, value) for key, value in all_losses.items()])
-                pb.write(log)
+                mb.write(log)
 
             # generate images for debugging
             if (i+1) % args.sample_every == 0:
