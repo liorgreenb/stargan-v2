@@ -207,15 +207,48 @@ class MappingNetwork(nn.Module):
                                             nn.ReLU(),
                                             nn.Linear(512, style_dim))]
 
-    def forward(self, z, y):
+    def forward(self, z, y=None):
+        
         h = self.shared(z)
         out = []
         for layer in self.unshared:
             out += [layer(h)]
         out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
-        idx = torch.LongTensor(range(y.size(0))).to(y.device)
-        s = out[idx, y]  # (batch, style_dim)
-        return s
+        result = out
+
+        if y is not None:
+            idx = torch.LongTensor(range(y.size(0))).to(y.device)
+            result = out[idx, y]  # (batch, style_dim)
+        
+        return result
+
+class EqualizingMappingNetwork(nn.Module):
+    def __init__(self, style_dim=64, num_domains=2):
+        super().__init__()
+
+        layers = []
+        layers += [nn.Linear(style_dim, 512)]
+        layers += [nn.ReLU()]
+        for _ in range(5):
+            layers += [nn.Linear(512, 512)]
+            layers += [nn.ReLU()]
+        layers += [nn.Linear(512, style_dim)]
+        self.style_equal_layers = nn.Sequential(*layers)
+
+    def forward(self, z, mapping_network):
+        styles = mapping_network(z)
+
+        equal_style = self.style_equal_layers(styles)
+
+
+        # h = self.shared(z)
+        # out = []
+        # for layer in self.unshared:
+        #     out += [layer(h)]
+        # out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
+        # idx = torch.LongTensor(range(y.size(0))).to(y.device)
+        # s = out[idx, y]  # (batch, style_dim)
+        return equal_style
 
 
 class StyleEncoder(nn.Module):
@@ -292,8 +325,7 @@ def build_model(args):
 
     # Equal
     generator_equal = copy.deepcopy(generator) # Image + style => New image
-    mapping_network_equal = MappingNetwork(args.latent_dim, args.style_dim, args.num_domains + 1) # latent => style X 1
-
+    mapping_network_equal = EqualizingMappingNetwork(args.style_dim, args.num_domains + 1) # latent => style X 1
 
     # EMA
     generator_ema = copy.deepcopy(generator)

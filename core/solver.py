@@ -300,11 +300,11 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
 #     y_equal = torch.full((len(y_org),), 4, dtype=torch.long)
 
 
-    s_equal = nets.mapping_network_equal(z_trg, y_equal)
+    s_equal = nets.mapping_network_equal(z_trg, mapping_network=nets.mapping_network)
     x_equal = nets.generator_equal(x_real, s_equal, masks=masks)
 
     # diversity sensitive loss
-    s_equal2 = nets.mapping_network_equal(z_trg2, y_equal)
+    s_equal2 = nets.mapping_network_equal(z_trg2, y_equal, mapping_network=nets.mapping_network)
 
     x_equal2 = nets.generator_equal(x_real, s_equal2, masks=masks)
     x_equal2 = x_equal2.detach()
