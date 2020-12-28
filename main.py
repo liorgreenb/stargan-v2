@@ -114,7 +114,9 @@ if __name__ == '__main__':
                         help='weight for high-pass filtering')
 
     # training arguments
-    parser.add_argument('--equalize', type=bool, default=False,
+    parser.add_argument('--equalize', type=str2bool, default=False, const=True, nargs='?',
+                        help='Should train to find the equalized domain')
+    parser.add_argument('--also_equalize', type=str2bool, default=False, const=True, nargs='?',
                         help='Should train to find the equalized domain')
     parser.add_argument('--equal_label', type=int, default=10,
                         help='Equalization label')

@@ -110,7 +110,7 @@ class Solver(nn.Module):
 
             masks = nets.fan.get_heatmap(x_real) if args.w_hpf > 0 else None
 
-            if not args.equalize:
+            if not args.equalize or args.also_equalize:
                 # train the discriminator
                 d_loss, d_losses_latent = compute_d_loss(
                     nets, args, x_real, y_org, y_trg, z_trg=z_trg, masks=masks)
@@ -144,7 +144,7 @@ class Solver(nn.Module):
                 moving_average(nets.mapping_network, nets_ema.mapping_network, beta=0.999)
                 moving_average(nets.style_encoder, nets_ema.style_encoder, beta=0.999)
             
-            else:
+            if args.equalize or args.also_equalize:
                 g_equal_loss, g_equal_losses = compute_g_equal_loss(
                 nets, args, x_real, y_org, y_trg, z_trgs=[z_trg, z_trg2], masks=masks)
                 
@@ -181,9 +181,10 @@ class Solver(nn.Module):
             # generate images for debugging
             if (i+1) % args.sample_every == 0:
                 os.makedirs(args.sample_dir, exist_ok=True)
-                if args.equalize:
+                if args.equalize or args.also_equalize:
                     utils.debug_image_equal(nets_ema, args, inputs=inputs_val, step=i+1)
-                else:
+                
+                if not args.equalize:
                     utils.debug_image(nets_ema, args, inputs=inputs_val, step=i+1)
 
             # save model checkpoints
