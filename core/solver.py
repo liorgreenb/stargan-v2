@@ -296,10 +296,6 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     z_trg, z_trg2 = z_trgs
 
     
-    y_equal = torch.LongTensor([args.num_domains] * len(y_org))
-#     y_equal = torch.full((len(y_org),), 4, dtype=torch.long)
-
-
     s_equal = nets.mapping_network_equal(z_trg, mapping_network=nets.mapping_network)
     x_equal = nets.generator_equal(x_real, s_equal, masks=masks)
 
@@ -308,19 +304,21 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
 
     x_equal2 = nets.generator_equal(x_real, s_equal2, masks=masks)
     x_equal2 = x_equal2.detach()
-    loss_ds = torch.mean(torch.abs(x_equal - x_equal2))
+    loss_ds = image_diff_loss(x_equal, x_equal2)
 
     # cycle-consistency loss
-    masks = nets.fan.get_heatmap(x_equal) if args.w_hpf > 0 else None
-    s_org = nets.style_encoder(x_real, y_org)
-    x_rec = nets.generator_equal(x_equal, s_org, masks=masks)
+    equal_masks = nets.fan.get_heatmap(x_equal) if args.w_hpf > 0 else None
+    with torch.no_grad():
+        s_org = nets.style_encoder(x_real, y_org)
+    x_rec = nets.generator_equal(x_equal, s_org, masks=equal_masks)
     loss_cyc = image_diff_loss(x_rec, x_real)
 
     # Equal conversion loss
-    s_fake = nets.mapping_network(z_trg, y_trg)
-    x_fake = nets.generator(x_real, s_fake, masks=masks)
+    with torch.no_grad():
+        s_fake = nets.mapping_network(z_trg, y_trg)
+        x_fake = nets.generator(x_real, s_fake, masks=masks)
     
-    x_fake_equal = nets.generator_equal(x_fake, s_equal)
+    x_fake_equal = nets.generator_equal(x_fake, s_equal, masks=masks)
     
     loss_equal = image_diff_loss(x_equal, x_fake_equal)
 
@@ -332,7 +330,8 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     loss = args.lambda_equal * loss_equal + args.lambda_equal_cls * loss_equal_cls\
                 -args.lambda_ds * loss_ds + args.lambda_cyc * loss_cyc
     
-    return loss, Munch(equal=loss_equal.item(),
+    return loss, Munch(total=loss,
+                       equal=loss_equal.item(),
                        equal_cls=loss_equal_cls.item(),
                        ds=loss_ds.item(),
                        cyc=loss_cyc.item())

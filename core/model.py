@@ -229,32 +229,20 @@ class EqualizingMappingNetwork(nn.Module):
         layers = []
         layers += [nn.Linear(style_dim * num_domains, 512)]
         layers += [nn.ReLU()]
-        for _ in range(5):
+        for _ in range(3):
             layers += [nn.Linear(512, 512)]
             layers += [nn.ReLU()]
         layers += [nn.Linear(512, style_dim)]
-        self.style_equal_layers = nn.Sequential(*layers)
+        self.model = nn.Sequential(*layers)
 
     def forward(self, z, mapping_network):
-        styles = mapping_network(z)
+        with torch.no_grad():
+            styles = mapping_network(z)
         
-
         flat_styles = styles.view((z.size(0), -1))
 
-        print('style', flat_styles.shape)
+        equal_style = self.model(flat_styles)
 
-        equal_style = self.style_equal_layers(flat_styles)
-
-        print('output', equal_style.shape)
-
-
-        # h = self.shared(z)
-        # out = []
-        # for layer in self.unshared:
-        #     out += [layer(h)]
-        # out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
-        # idx = torch.LongTensor(range(y.size(0))).to(y.device)
-        # s = out[idx, y]  # (batch, style_dim)
         return equal_style
 
 
