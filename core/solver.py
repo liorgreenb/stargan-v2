@@ -304,7 +304,7 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     x_equal = nets.generator_equal(x_real, s_equal, masks=masks)
 
     # diversity sensitive loss
-    s_equal2 = nets.mapping_network_equal(z_trg2, y_equal, mapping_network=nets.mapping_network)
+    s_equal2 = nets.mapping_network_equal(z_trg2, mapping_network=nets.mapping_network)
 
     x_equal2 = nets.generator_equal(x_real, s_equal2, masks=masks)
     x_equal2 = x_equal2.detach()

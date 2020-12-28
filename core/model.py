@@ -227,7 +227,7 @@ class EqualizingMappingNetwork(nn.Module):
         super().__init__()
 
         layers = []
-        layers += [nn.Linear(style_dim, 512)]
+        layers += [nn.Linear(style_dim * num_domains, 512)]
         layers += [nn.ReLU()]
         for _ in range(5):
             layers += [nn.Linear(512, 512)]
@@ -237,8 +237,15 @@ class EqualizingMappingNetwork(nn.Module):
 
     def forward(self, z, mapping_network):
         styles = mapping_network(z)
+        
 
-        equal_style = self.style_equal_layers(styles)
+        flat_styles = styles.view((z.size(0), -1))
+
+        print('style', flat_styles.shape)
+
+        equal_style = self.style_equal_layers(flat_styles)
+
+        print('output', equal_style.shape)
 
 
         # h = self.shared(z)
@@ -325,7 +332,7 @@ def build_model(args):
 
     # Equal
     generator_equal = copy.deepcopy(generator) # Image + style => New image
-    mapping_network_equal = EqualizingMappingNetwork(args.style_dim, args.num_domains + 1) # latent => style X 1
+    mapping_network_equal = EqualizingMappingNetwork(args.style_dim, args.num_domains) # latent => style X 1
 
     # EMA
     generator_ema = copy.deepcopy(generator)

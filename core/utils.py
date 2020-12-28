@@ -120,7 +120,7 @@ def cycle_equal_using_latent(nets, args, x_src, y_src, y_trg_list, z_trg_list, p
 
         for z_trg in z_trg_list:
             s_trg = nets.mapping_network(z_trg, y_trg)
-            s_trg_equal = nets.mapping_network_equal(z_trg, y_equal, mapping_network=nets.mapping_network)
+            s_trg_equal = nets.mapping_network_equal(z_trg, mapping_network=nets.mapping_network)
 
             # s_trg = torch.lerp(s_avg, s_trg, psi)
             x_equal = nets.generator_equal(x_src, s_trg_equal, masks=masks)

@@ -41,7 +41,7 @@ class CheckpointIO(object):
         for name, module in self.module_dict.items():
             if name in module_dict.keys():
                 module.load_state_dict(module_dict[name])
-            elif '_equal' in name and name.replace('_equal', '') in module_dict.keys():
+            elif 'generator_equal' in name and name.replace('_equal', '') in module_dict.keys():
                 print('Using normal net weights for equal netowrk-', name)
                 module.load_state_dict(module_dict[name.replace('_equal', '')])
             else:
