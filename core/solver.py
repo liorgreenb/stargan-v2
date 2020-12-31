@@ -364,7 +364,7 @@ def adv_loss(logits, target):
     return loss
 
 def class_loss(logits, target):
-    n_domains = logits.size(2)
+    n_domains = logits.size(1)
     tars = [torch.eye(n_domains)[idx.int()] for idx in target.view(-1)]
     tars = torch.stack(tars).cuda()
 
