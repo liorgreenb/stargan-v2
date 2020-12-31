@@ -293,23 +293,38 @@ class Discriminator(nn.Module):
             blocks += [ResBlk(dim_in, dim_out, downsample=True)]
             dim_in = dim_out
 
-        blocks += [nn.LeakyReLU(0.2)]
-        blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
-        blocks += [nn.LeakyReLU(0.2)]
-        blocks += [nn.Conv2d(dim_out, num_domains, 1, 1, 0)]
-        self.main = nn.Sequential(*blocks)
+        self.shared_body = nn.Sequential(*blocks)
+
+        adv_blocks = []
+        adv_blocks += [nn.LeakyReLU(0.2)]
+        adv_blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
+        adv_blocks += [nn.LeakyReLU(0.2)]
+        adv_blocks += [nn.Conv2d(dim_out, num_domains, 1, 1, 0)]
+        self.adv_head = nn.Sequential(*adv_blocks)
+
+        cls_blocks = []
+        cls_blocks += [nn.LeakyReLU(0.2)]
+        cls_blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
+        cls_blocks += [nn.LeakyReLU(0.2)]
+        cls_blocks += [nn.Conv2d(dim_out, num_domains, 1, 1, 0)]
+        self.cls_head = nn.Sequential(*cls_blocks)
 
     def forward(self, x, y=None):
-        out = self.main(x)
-        out = out.view(out.size(0), -1)  # (batch, num_domains)
+        body_out = self.shared_body(x)
+        adv_out = self.adv_head(body_out)
+        cls_out = self.cls_head(body_out)
+
+        cls_out = cls_out.view(cls_out.size(0), -1)  # (batch, num_domains)
+
+        adv_out = adv_out.view(adv_out.size(0), -1)  # (batch, num_domains)
         idx = torch.LongTensor(range(x.size(0))).to(x.device)
 
         if y is not None:
-            out = out[idx, y]  # (batch)
+            adv_out = adv_out[idx, y]  # (batch)
         else:
-            out = out[idx, :]
+            adv_out = adv_out[idx, :]
 
-        return out
+        return adv_out, cls_out
 
 
 def build_model(args):

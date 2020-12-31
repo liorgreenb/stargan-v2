@@ -26,6 +26,8 @@ from core.data_loader import InputFetcher
 import core.utils as utils
 from metrics.eval import calculate_metrics
 
+classification_loss = nn.BCEWithLogitsLoss()
+
 class Solver(nn.Module):
     def __init__(self, args):
         super().__init__()
@@ -228,9 +230,11 @@ def compute_d_loss(nets, args, x_real, y_org, y_trg, z_trg=None, x_ref=None, mas
     assert (z_trg is None) != (x_ref is None)
     # with real images
     x_real.requires_grad_()
-    out = nets.discriminator(x_real, y_org)
-    loss_real = adv_loss(out, 1)
-    loss_reg = r1_reg(out, x_real)
+    adv_out, cls_out = nets.discriminator(x_real, y_org)
+    
+    loss_real = adv_loss(adv_out, 1)
+    loss_reg = r1_reg(adv_out, x_real)
+    loss_cls_org = class_loss(cls_out, y_org)
 
     # with fake images
     with torch.no_grad():
@@ -240,12 +244,16 @@ def compute_d_loss(nets, args, x_real, y_org, y_trg, z_trg=None, x_ref=None, mas
             s_trg = nets.style_encoder(x_ref, y_trg)
 
         x_fake = nets.generator(x_real, s_trg, masks=masks)
-    out = nets.discriminator(x_fake, y_trg)
-    loss_fake = adv_loss(out, 0)
+    fake_adv_out, _ = nets.discriminator(x_fake, y_trg)
+    loss_fake = adv_loss(fake_adv_out, 0)
+    # loss_cls_fake = class_loss(fake_cls_out, y_trg)
 
-    loss = loss_real + loss_fake + args.lambda_reg * loss_reg
+    loss = loss_real + loss_fake\
+            + args.lambda_reg * loss_reg\
+            + args.lambda_cls * loss_cls_org
     return loss, Munch(real=loss_real.item(),
                        fake=loss_fake.item(),
+                       real_cls=loss_cls_org,
                        reg=loss_reg.item())
 
 
@@ -263,8 +271,8 @@ def compute_g_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=None, m
         s_trg = nets.style_encoder(x_ref, y_trg)
 
     x_fake = nets.generator(x_real, s_trg, masks=masks)
-    out = nets.discriminator(x_fake, y_trg)
-    loss_adv = adv_loss(out, 1)
+    adv_out, _ = nets.discriminator(x_fake, y_trg)
+    loss_adv = adv_loss(adv_out, 1)
 
     # style reconstruction loss
     s_pred = nets.style_encoder(x_fake, y_trg)
@@ -278,6 +286,11 @@ def compute_g_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=None, m
     x_fake2 = nets.generator(x_real, s_trg2, masks=masks)
     x_fake2 = x_fake2.detach()
     loss_ds = torch.mean(torch.abs(x_fake - x_fake2))
+
+
+    # Mapping network = z noise --> style noise per domain [style_1, style_2, style_3]
+    # Style encoder = image --> image style per domain [style_1, style_2, style_3]
+
 
     # cycle-consistency loss
     masks = nets.fan.get_heatmap(x_fake) if args.w_hpf > 0 else None
@@ -324,7 +337,8 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     loss_equal = image_diff_loss(x_equal, x_fake_equal)
 
     # Equal classification loss
-    y_pred = nets.discriminator(x_equal)
+    ##### Maybe this is adverserial loss and not classification loss
+    _, y_pred = nets.discriminator(x_equal)
     loss_equal_cls = equalization_classification(y_pred)
     
 
@@ -349,6 +363,13 @@ def adv_loss(logits, target):
     loss = F.binary_cross_entropy_with_logits(logits, targets)
     return loss
 
+def class_loss(logits, target):
+    n_domains = logits.size(2)
+    tars = [torch.eye(n_domains)[idx.int()] for idx in target.view(-1)]
+    tars = torch.stack(tars).cuda()
+
+    loss = nn.BCEWithLogitsLoss()(logits, tars)
+    return loss
 
 def image_diff_loss(x, y):
     return torch.mean(torch.abs(x - y))
@@ -358,7 +379,7 @@ def equalization_classification(logit):
     n_domains = logit.size(1)
     
     zeros = torch.full((batch_size, n_domains), 0.5).float().cuda()
-    vars = (logit).sum(1)
+    # vars = (logit).sum(1)
     return nn.BCEWithLogitsLoss()(logit, zeros)
 
 def r1_reg(d_out, x_in):
