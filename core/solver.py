@@ -369,7 +369,7 @@ def class_loss(logits, target):
     tars = [torch.eye(n_domains)[idx.int()] for idx in target.view(-1)]
     tars = torch.stack(tars).cuda()
 
-    loss = nn.BCELoss()(logits, tars)
+    loss = nn.BCEWithLogitsLoss()(logits, tars)
     return loss
 
 def image_diff_loss(x, y):
@@ -381,7 +381,7 @@ def equalization_classification(logit):
     
     zeros = torch.full((batch_size, n_domains), 0.5).float().cuda()
     # vars = (logit).sum(1)
-    return nn.BCELoss()(logit, zeros)
+    return nn.BCEWithLogitsLoss()(logit, zeros)
 
 def r1_reg(d_out, x_in):
     # zero-centered gradient penalty for real images

@@ -302,13 +302,11 @@ class Discriminator(nn.Module):
         adv_blocks += [nn.Conv2d(dim_out, num_domains, 1, 1, 0)]
         self.adv_head = nn.Sequential(*adv_blocks)
 
-        cls_blocks = [
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(dim_out, dim_out, 4, 1, 0),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(dim_out, num_domains, 1, 1, 0),
-            nn.Sigmoid(),
-        ]
+        cls_blocks = []
+        cls_blocks += [nn.LeakyReLU(0.2)]
+        cls_blocks += [nn.Conv2d(dim_out, dim_out, 4, 1, 0)]
+        cls_blocks += [nn.LeakyReLU(0.2)]
+        cls_blocks += [nn.Conv2d(dim_out, num_domains, 1, 1, 0)]
         self.cls_head = nn.Sequential(*cls_blocks)
 
     def forward(self, x, y=None):
