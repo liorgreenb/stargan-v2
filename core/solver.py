@@ -338,7 +338,8 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
 
     # Equal classification loss
     ##### Maybe this is adverserial loss and not classification loss
-    _, y_pred = nets.discriminator(x_equal)
+    with torch.no_grad():
+        _, y_pred = nets.discriminator(x_equal)
     loss_equal_cls = equalization_classification(y_pred)
     
 
