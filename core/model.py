@@ -190,37 +190,29 @@ class MappingNetwork(nn.Module):
     def __init__(self, latent_dim=16, style_dim=64, num_domains=2):
         super().__init__()
         layers = []
-        layers += [nn.Linear(latent_dim, 512)]
+        layers += [nn.Linear(1 + latent_dim, 512)]
         layers += [nn.ReLU()]
         for _ in range(3):
             layers += [nn.Linear(512, 512)]
             layers += [nn.ReLU()]
         self.shared = nn.Sequential(*layers)
 
-        self.unshared = nn.ModuleList()
-        for _ in range(num_domains):
-            self.unshared += [nn.Sequential(nn.Linear(512, 512),
+        self.style_head = nn.Sequential(nn.Linear(512, 512),
                                             nn.ReLU(),
                                             nn.Linear(512, 512),
                                             nn.ReLU(),
                                             nn.Linear(512, 512),
                                             nn.ReLU(),
-                                            nn.Linear(512, style_dim))]
+                                            nn.Linear(512, style_dim))
 
-    def forward(self, z, y=None):
+    def forward(self, z, y):
+        y = y.view((y.size(0), 1))
+        input_tensor = torch.cat([y, z], 1)
         
-        h = self.shared(z)
-        out = []
-        for layer in self.unshared:
-            out += [layer(h)]
-        out = torch.stack(out, dim=1)  # (batch, num_domains, style_dim)
-        result = out
-
-        if y is not None:
-            idx = torch.LongTensor(range(y.size(0))).to(y.device)
-            result = out[idx, y]  # (batch, style_dim)
+        h = self.shared(input_tensor)
+        out = self.style_head(h)
         
-        return result
+        return out
 
 class EqualizingMappingNetwork(nn.Module):
     def __init__(self, style_dim=64, num_domains=2):
