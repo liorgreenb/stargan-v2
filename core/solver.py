@@ -42,7 +42,7 @@ class Solver(nn.Module):
         for name, module in self.nets_ema.items():
             setattr(self, name + '_ema', module)
 
-        if args.mode == 'train':
+        if args.mode == 'train' or args.mode == 'equal_style':
             self.optims = Munch()
             for net in self.nets.keys():
                 if net == 'fan':
@@ -225,6 +225,59 @@ class Solver(nn.Module):
         calculate_metrics(nets_ema, args, step=resume_iter, mode='latent')
         calculate_metrics(nets_ema, args, step=resume_iter, mode='reference')
 
+    def equal_style(self, loaders):
+        print("equal style")
+        args = self.args
+        nets = self.nets
+        nets_ema = self.nets_ema
+        optims = self.optims
+
+        # fetch random validation images for debugging
+        fetcher = InputFetcher(loaders.src, loaders.ref, args.latent_dim, 'train')
+
+        # resume training if necessary
+        self._load_checkpoint(args.resume_iter)
+
+        # remember the initial value of ds weight
+        initial_lambda_ds = args.lambda_ds
+
+        d_losses_latent, d_losses_ref, g_losses_latent, g_losses_ref, g_equal_losses = [{}] * 5
+        
+    
+        print('Start training...')
+        start_time = time.time()
+        mb = master_bar(range(1))
+        pb = progress_bar(list(range(args.resume_iter, args.total_iters))[:1], parent=mb)
+        for i in pb:
+            # fetch images and labels
+            inputs = next(fetcher)
+            x_real, y_org = inputs.x_src, inputs.y_src
+            print(y_org)
+            x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
+            z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
+
+            masks = nets.fan.get_heatmap(x_real) if args.w_hpf > 0 else None
+
+            styles = [nets.style_encoder(x_real, torch.full(y_org.shape, domain_idx, dtype=torch.long)) for domain_idx in range(4)]
+            fakes = [nets.generator(x_real, style) for style in styles]
+            
+            mean_style = torch.stack(styles).mean(0)
+            
+            equal = nets.generator(x_real, mean_style)
+            
+            images = [
+                x_real,
+                *fakes,
+                equal
+            ]
+            
+            images = torch.cat(images, dim=0)
+
+            
+            utils.save_image(images, x_real.size(0), 'infer_equal.jpg')
+
+        torch.save(styles, 'styles')
+
 
 def compute_d_loss(nets, args, x_real, y_org, y_trg, z_trg=None, x_ref=None, masks=None):
     assert (z_trg is None) != (x_ref is None)
@@ -337,7 +390,6 @@ def compute_g_equal_loss(nets, args, x_real, y_org, y_trg, z_trgs=None, x_refs=N
     loss_equal = image_diff_loss(x_equal, x_fake_equal)
 
     # Equal classification loss
-    ##### Maybe this is adverserial loss and not classification loss
     with torch.no_grad():
         _, y_pred = nets.discriminator(x_equal)
     loss_equal_cls = equalization_classification(y_pred)
