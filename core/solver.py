@@ -256,14 +256,15 @@ class Solver(nn.Module):
             x_ref, x_ref2, y_trg = inputs.x_ref, inputs.x_ref2, inputs.y_ref
             z_trg, z_trg2 = inputs.z_trg, inputs.z_trg2
 
-            masks = nets.fan.get_heatmap(x_real) if args.w_hpf > 0 else None
+            masks = nets_ema.fan.get_heatmap(x_real) if args.w_hpf > 0 else None
 
-            styles = [nets.style_encoder(x_real, torch.full(y_org.shape, domain_idx, dtype=torch.long)) for domain_idx in range(4)]
-            fakes = [nets.generator(x_real, style) for style in styles]
+            # styles = [nets_ema.style_encoder(x_real, torch.full(y_org.shape, domain_idx, dtype=torch.long)) for domain_idx in range(4)]
+            styles = [nets_ema.mapping_network(z_trg, torch.full(y_org.shape, domain_idx, dtype=torch.long)) for domain_idx in range(4)]
+            fakes = [nets_ema.generator(x_real, style) for style in styles]
             
             mean_style = torch.stack(styles).mean(0)
             
-            equal = nets.generator(x_real, mean_style)
+            equal = nets_ema.generator(x_real, mean_style)
             
             images = [
                 x_real,
@@ -274,7 +275,7 @@ class Solver(nn.Module):
             images = torch.cat(images, dim=0)
 
             
-            utils.save_image(images, x_real.size(0), 'infer_equal.jpg')
+            utils.save_image(images, x_real.size(0), f"{args.sample_dir}/infer_equal.jpg")
 
         torch.save(styles, 'styles')
 
